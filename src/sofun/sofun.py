@@ -15,15 +15,6 @@ SH_TYPE_SZ = 0x4
 ST_SIZE = 24
 ST_NAME_OFF = 0x0
 ST_NAME_SZ = 0x4
-ST_INFO_OFF = 0x4
-ST_INFO_SZ = 0x1
-ST_NDX_OFF = 0x6
-ST_NDX_SZ = 0x2
-ST_INFO_TYPE_MASK = 0x0F
-ST_INFO_TYPE_FUNC = 0x2
-SHT_HASH = 0x5
-
-SHT_SYMTAB = 0x2
 
 
 def get_e_shoff(f: BufferedReader) -> int:
@@ -89,35 +80,34 @@ def main():
     strseg_off = read_int(handle, offs[e_shstrndx] + SH_OFF_OFF, SH_NAME_SZ)
     print(f"shstr: {hex(strseg_off)}")
 
-    # Locate symtab segment which contains all the segment names
+    # Locate relevant segments
     names: list[str] = []
     for off in name_offs:
         names.append(read_str(handle, strseg_off + off))
+    print("\nFound the following segments:")
+    for i in range(0, len(names)):
+        print(f"{names[i]}: {hex(read_int(handle, offs[i] + SH_OFF_OFF, SH_OFF_SZ))}")
 
     # Find the symbol table segment
-    # We can re-traverse again to look for SHT_SYMTAB but meh
-    symtab_off = offs[names.index(".symtab")]
-    assert read_int(handle, symtab_off + SH_TYPE_OFF, SH_TYPE_SZ) == SHT_SYMTAB
-    symtab = read_int(handle, symtab_off + SH_OFF_OFF, SH_OFF_SZ)
-    print(f".symtab: {hex(symtab)}")
+    # We can re-traverse again to look for the correct segment type but meh
+    dynsym_off = offs[names.index(".dynsym")]
+    dynsym = read_int(handle, dynsym_off + SH_OFF_OFF, SH_OFF_SZ)
+    print(f".dynsym: {hex(dynsym)}")
 
-    # Find strtab containing the function names
-    strtab_off = offs[names.index(".strtab")]
-    strtab = read_int(handle, strtab_off + SH_OFF_OFF, SH_OFF_SZ)
-    print(f".strtab: {hex(strtab)}")
+    # Find segment containing the function names
+    dynstr_off = offs[names.index(".dynstr")]
+    dynstr = read_int(handle, dynstr_off + SH_OFF_OFF, SH_OFF_SZ)
+    print(f".dynstr: {hex(dynstr)}")
 
-    symtab_size = read_int(handle, symtab_off + SH_SIZE_OFF, SH_SIZE_SZ)
+    dynsym_size = read_int(handle, dynsym_off + SH_SIZE_OFF, SH_SIZE_SZ)
 
-    # Traverse symtab, check type and print names if match
+    # Traverse dynsym, check type and print names if match
     print("\nSymbols found:")
-    for i in range(0, int(symtab_size / ST_SIZE)):
-        entry_off = symtab + i * ST_SIZE
+    for i in range(0, int(dynsym_size / ST_SIZE)):
+        entry_off = dynsym + i * ST_SIZE
         name_off = read_int(handle, entry_off + ST_NAME_OFF, ST_NAME_SZ)
-        info = read_int(handle, entry_off + ST_INFO_OFF, ST_INFO_SZ)
-        ndx = read_int(handle, entry_off + ST_NDX_OFF, ST_NDX_SZ)
-        if (info & ST_INFO_TYPE_MASK) == ST_INFO_TYPE_FUNC and ndx == SHT_HASH:
-            name = read_str(handle, strtab + name_off)
-            print(name)
+        name = read_str(handle, dynstr + name_off)
+        print(name)
 
     handle.close()
 
